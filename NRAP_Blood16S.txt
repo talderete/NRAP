@@ -12,7 +12,9 @@ mappingData <- mappingData[order(mappingData$MergeID),]
   ######  Working in code from AF - MDS  #########
   ################################################
   
-  taxaLevels <- c("Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU" )
+  #taxaLevels <- c("Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU" )
+  taxaLevels <- c( "Family" )
+  
   
   for( taxa in taxaLevels ) 
   {
@@ -40,7 +42,7 @@ mappingData <- mappingData[order(mappingData$MergeID),]
   ######   Working in code from AF - TAXA #########
   #################################################
   
-  taxaLevels <- c("Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU" )
+#  taxaLevels <- c("Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU" )
   
   for( taxa in taxaLevels ) 
   {
@@ -81,6 +83,19 @@ mappingData <- mappingData[order(mappingData$MergeID),]
       dev.off()	
     }
   
+  isSigInFrame <- function(dFrame, taxaName)
+  {
+  	
+  	if( length(dFrame$adjusted[ dFrame$names == taxaName ]) == 0  ) 
+  		return (FALSE)
+  
+  	if( dFrame$adjusted[ dFrame$names == taxaName ] < .05 ) 
+  		return ( TRUE)
+  	else
+  		return (FALSE)
+ 
+  }
+  
   #####################################################################################################
   # At the Family Examine: Family_Staphylococcaceae Family_Clostridiaceae.1 Family_Multi.affiliation
   # Family_Phyllobacteriaceae, Family_Caulobacteraceae
@@ -104,6 +119,25 @@ mappingData <- mappingData[order(mappingData$MergeID),]
     #Only examine family of interest 
     myTLoggedSubSet <- myTLoggedSubSetNoControls[,c("Family_Staphylococcaceae","Family_Clostridiaceae.1","Family_Multi.affiliation",
                                     "Family_Phyllobacteriaceae","Family_Caulobacteraceae")]
+                                    
+     isIn <- vector()
+     someNames <- colnames(myTLoggedSubSetNoControls)
+     
+     for( i in 1:(length(someNames)))
+     {
+     	if(  isSigInFrame(dFrame, someNames[i]))
+     	{
+     		isIn[i] = TRUE
+     	}
+     	else
+     	{
+     		isIn[i] = FALSE
+     	}
+     }
+                                    
+    myTLoggedSubSet <- myTLoggedSubSetNoControls[,isIn]
+                                    
+                                    
     #Merge in Metadata
     taxaMeta <- merge(mappingData,myTLoggedSubSet,by.x="ID_Tube",by.y="row.names")
     
