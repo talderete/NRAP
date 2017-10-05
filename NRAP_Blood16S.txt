@@ -11,9 +11,9 @@ mappingData <- mappingData[order(mappingData$MergeID),]
   ################################################
   ######  Working in code from AF - MDS  #########
   ################################################
-  
+  taxaLevels <- c("Class", "Order", "Family", "Genus", "Species", "OTU" )
   #taxaLevels <- c("Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU" )
-  taxaLevels <- c( "Family" )
+  #taxaLevels <- c( "Family" )
   
   
   for( taxa in taxaLevels ) 
@@ -42,7 +42,7 @@ mappingData <- mappingData[order(mappingData$MergeID),]
   ######   Working in code from AF - TAXA #########
   #################################################
   
-#  taxaLevels <- c("Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU" )
+ #taxaLevels <- c("Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU" )
   
   for( taxa in taxaLevels ) 
   {
@@ -100,7 +100,7 @@ mappingData <- mappingData[order(mappingData$MergeID),]
   # At the Family Examine: Family_Staphylococcaceae Family_Clostridiaceae.1 Family_Multi.affiliation
   # Family_Phyllobacteriaceae, Family_Caulobacteraceae
   #####################################################################################################
-  taxaLevels <- c("Family")
+  #taxaLevels <- c("Family")
   
   for(taxa in taxaLevels)
   {
@@ -115,11 +115,7 @@ mappingData <- mappingData[order(mappingData$MergeID),]
     myTLogged <- data.frame(myTLogged)
     myTLogged$isControl <- substring(row.names(myTLogged),1,1) == "C"
     myTLoggedSubSetNoControls <- myTLogged[which(myTLogged$isControl != "TRUE"), ]
-    
-    #Only examine family of interest 
-    myTLoggedSubSet <- myTLoggedSubSetNoControls[,c("Family_Staphylococcaceae","Family_Clostridiaceae.1","Family_Multi.affiliation",
-                                    "Family_Phyllobacteriaceae","Family_Caulobacteraceae")]
-                                    
+        
      isIn <- vector()
      someNames <- colnames(myTLoggedSubSetNoControls)
      
