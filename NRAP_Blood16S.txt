@@ -1,5 +1,7 @@
 library(ppcor)
 library(vegan)
+library(dplyr)
+library(tidyr)
 
 rm(list=ls())
 
@@ -8,135 +10,125 @@ setwd("~/Dropbox/NRAP MetaAIR Stool Sequencing")
 mappingData <- read.delim("Datasets/MetaAir_NRAP_26apr17.txt",header=TRUE, sep=",")
 mappingData <- mappingData[order(mappingData$MergeID),]
 
-  ################################################
-  ######  Working in code from AF - MDS  #########
-  ################################################
-  taxaLevels <- c("Class", "Order", "Family", "Genus", "Species", "OTU" )
-  #taxaLevels <- c("Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU" )
-  #taxaLevels <- c( "Family" )
+################################################
+######  Working in code from AF - MDS  #########
+################################################
+#taxaLevels <- c("Class", "Order", "Family", "Genus", "Species", "OTU" )
+#taxaLevels <- c("Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU" )
+taxaLevels <- c( "Family" )
+
+
+for( taxa in taxaLevels ) 
+{
+  otuTableAir <- read.delim(paste("Datasets/Blood Sequencing/Blood ",taxa," META 18July16.txt",sep = ""),header = TRUE, row.names = 1)
+  myT <- t(otuTableAir)
   
+  #Blood data is percentages and not sequence read counts. 
+  #"myT/100" to convert the numbers from "%" to decimals. 
+  #Multiply by the average sequence counts per sample 
+  #Got this number from the OTU-level blood table (since the other levels are reported in terms of relative abundances) and it is ~35,000.
+  myTLogged <- log10(((myT/100)*35000) +1)
+  myT <- t(myTLogged)
   
-  for( taxa in taxaLevels ) 
+  myPCOA <- capscale(myT~1,distance="bray")
+  
+  newT <- data.frame( cbind( myPCOA$CA$u, myT))
+  newT$isControl <- substring(row.names(myT),1,1) == "C"
+  newT$names <- row.names(myT)
+  
+  write.table(newT, sep="\t", file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/pcoa_TLA_", taxa, ".txt",sep=""),row.names=FALSE)
+  write.table(myPCOA$CA$eig,file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/eigenValues_TLA_", taxa, ".txt", sep=""), sep="\t")
+}
+
+#################################################
+######   Working in code from AF - TAXA #########
+#################################################
+
+#taxaLevels <- c("Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU" )
+
+for( taxa in taxaLevels ) 
+{
+  otuTableAir <- read.delim(paste("Datasets/Blood Sequencing/Blood ",taxa," META 18July16.txt",sep = ""),header = TRUE, row.names = 1)
+  myT <- t(otuTableAir)
+  myTLogged <- log10(((myT/100)*35000) +1)
+  myT <- t(myTLogged)
+  
+  myPCOA <- capscale(myT~1,distance="bray")
+  
+  pdf(paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/pValues_TLA",taxa,"TLA.pdf"))
+  pValues <- vector()
+  names <- vector()
+  
+  isControl <- substring(row.names(myT),1,1) == "C"
+  
+  for( i in 2: ncol(myT))
   {
-      otuTableAir <- read.delim(paste("Datasets/Blood Sequencing/Blood ",taxa," META 18July16.txt",sep = ""),header = TRUE, row.names = 1)
-      myT <- t(otuTableAir)
-      
-      #Blood data is percentages and not sequence read counts. 
-      #"myT/100" to convert the numbers from "%" to decimals. 
-      #Multiply by the average sequence counts per sample 
-      #Got this number from the OTU-level blood table (since the other levels are reported in terms of relative abundances) and it is ~35,000.
-      myTLogged <- log10(((myT/100)*35000) +1)
-      myT <- t(myTLogged)
-      
-      myPCOA <- capscale(myT~1,distance="bray")
+    bug <- myT[,i]
+    pValues[i-1] <- t.test(bug[isControl ==TRUE] , bug[isControl ==FALSE])$p.value
+    names[i-1] <- colnames(myT)[i] #had to add col in front of names
     
-      newT <- data.frame( cbind( myPCOA$CA$u, myT))
-      newT$isControl <- substring(row.names(myT),1,1) == "C"
-      newT$names <- row.names(myT)
+    myTitle <- paste( colnames(myT)[i], "P =", format(pValues[i-1],digits=3 ))
     
-    write.table(newT, sep="\t", file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/pcoa_TLA_", taxa, ".txt",sep=""),row.names=FALSE)
-    write.table(myPCOA$CA$eig,file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/eigenValues_TLA_", taxa, ".txt", sep=""), sep="\t")
-      }
-  
-  #################################################
-  ######   Working in code from AF - TAXA #########
-  #################################################
-  
- #taxaLevels <- c("Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU" )
-  
-  for( taxa in taxaLevels ) 
-  {
-    otuTableAir <- read.delim(paste("Datasets/Blood Sequencing/Blood ",taxa," META 18July16.txt",sep = ""),header = TRUE, row.names = 1)
-    myT <- t(otuTableAir)
-    myTLogged <- log10(((myT/100)*35000) +1)
-    myT <- t(myTLogged)
+    boxplot( bug ~ isControl , main = myTitle)
     
-      myPCOA <- capscale(myT~1,distance="bray")
-      
-      pdf(paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/pValues_TLA",taxa,"TLA.pdf"))
-      pValues <- vector()
-      names <- vector()
-      
-      isControl <- substring(row.names(myT),1,1) == "C"
-      
-      for( i in 2: ncol(myT))
-      {
-        bug <- myT[,i]
-        pValues[i-1] <- t.test(bug[isControl ==TRUE] , bug[isControl ==FALSE])$p.value
-        names[i-1] <- colnames(myT)[i] #had to add col in front of names
-        
-        myTitle <- paste( colnames(myT)[i], "P =", format(pValues[i-1],digits=3 ))
-        
-        boxplot( bug ~ isControl , main = myTitle)
-        
-        myFrame <- data.frame(bug ,isControl)
-        
-        stripchart(bug~ isControl, 	data = myFrame,vertical = TRUE, pch = 21, add=TRUE )		
-        
-        
-      }
-      
-      dFrame <- data.frame( names, pValues)
-      dFrame <- dFrame [order(dFrame$pValues),]
-      dFrame$adjustedP <- p.adjust( dFrame$pValues, method = "BH" )	
-      write.table(dFrame, file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/pValues_TLA", taxa, ".txt",sep=""), sep="\t",row.names=FALSE)
-      dev.off()	
-    }
-  
-  isSigInFrame <- function(dFrame, taxaName)
-  {
-  	
-  	if( length(dFrame$adjusted[ dFrame$names == taxaName ]) == 0  ) 
-  		return (FALSE)
-  
-  	if( dFrame$adjusted[ dFrame$names == taxaName ] < .05 ) 
-  		return ( TRUE)
-  	else
-  		return (FALSE)
- 
+    myFrame <- data.frame(bug ,isControl)
+    
+    stripchart(bug~ isControl, 	data = myFrame,vertical = TRUE, pch = 21, add=TRUE )		
+    
+    
   }
   
-  #####################################################################################################
-  # At the Family Examine: Family_Staphylococcaceae Family_Clostridiaceae.1 Family_Multi.affiliation
-  # Family_Phyllobacteriaceae, Family_Caulobacteraceae
-  #####################################################################################################
-  #taxaLevels <- c("Family")
+  dFrame <- data.frame( names, pValues)
+  dFrame <- dFrame [order(dFrame$pValues),]
+  dFrame$adjustedP <- p.adjust( dFrame$pValues, method = "BH" )	
+  write.table(dFrame, file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/pValues_TLA", taxa, ".txt",sep=""), sep="\t",row.names=FALSE)
+  dev.off()	
+}
+
+# isSigInFrame <- function(dFrame, taxaName)
+# {
+#   #if( length(dFrame$adjustedP[ dFrame$names == taxaName ]) == 0  ) 
+#   #return (FALSE)
+#   
+#   if( dFrame$adjustedP[ dFrame$names == taxaName ] < .05 ) 
+#     return ( TRUE)
+#   else
+#     return (FALSE)
+# }
+
+#####################################################################################################
+# At the Family Examine: Family_Staphylococcaceae Family_Clostridiaceae.1 Family_Multi.affiliation
+# Family_Phyllobacteriaceae, Family_Caulobacteraceae
+#####################################################################################################
+#taxaLevels <- c("Family")
+
+for(taxa in taxaLevels)
+{
+  otuTableAir <- read.delim(paste("Datasets/Blood Sequencing/Blood ",taxa," META 18July16.txt",sep = ""),header = TRUE, row.names = 1)
+  otuTableAir <- t(otuTableAir)
+  myT <- otuTableAir
   
-  for(taxa in taxaLevels)
-  {
-    otuTableAir <- read.delim(paste("Datasets/Blood Sequencing/Blood ",taxa," META 18July16.txt",sep = ""),header = TRUE, row.names = 1)
-    otuTableAir <- t(otuTableAir)
-    myT <- otuTableAir
-    
-    myTLogged <- log10(((myT/100)*35000) +1)
-    myTLogged <- t(myTLogged)
-    
-    #Remove controls
-    myTLogged <- data.frame(myTLogged)
-    myTLogged$isControl <- substring(row.names(myTLogged),1,1) == "C"
-    myTLoggedSubSetNoControls <- myTLogged[which(myTLogged$isControl != "TRUE"), ]
-        
-     isIn <- vector()
-     someNames <- colnames(myTLoggedSubSetNoControls)
-     
-     for( i in 1:(length(someNames)))
-     {
-     	if(  isSigInFrame(dFrame, someNames[i]))
-     	{
-     		isIn[i] = TRUE
-     	}
-     	else
-     	{
-     		isIn[i] = FALSE
-     	}
-     }
-                                    
-    myTLoggedSubSet <- myTLoggedSubSetNoControls[,isIn]
-                                    
-                                    
-    #Merge in Metadata
-    taxaMeta <- merge(mappingData,myTLoggedSubSet,by.x="ID_Tube",by.y="row.names")
-    
+  myTLogged <- log10(((myT/100)*35000) +1)
+  myTLogged <- t(myTLogged)
+  
+  #Remove controls
+  myTLogged <- data.frame(myTLogged)
+  myTLogged$isControl <- substring(row.names(myTLogged),1,1) == "C"
+  myTLoggedSubSetNoControls <- myTLogged[which(myTLogged$isControl != "TRUE"), ]
+  
+  TaxaNamesForComparison <- colnames(myTLoggedSubSetNoControls)
+  
+  dFrameSubsetTaxa <- filter(dFrame, names %in% TaxaNamesForComparison, adjustedP < 0.05)
+  dFrameSubsetSig  <- filter(dFrameSubsetTaxa, adjustedP < 0.05)
+  dFrameSubsetSig2 <- select(myTLoggedSubSetNoControls,one_of(as.character(dFrameSubsetSig$names)))
+  
+  
+  myTLoggedSubSetNoControls
+  
+  #Merge in Metadata
+  taxaMeta <- merge(mappingData, dFrameSubsetSig2, by.x="ID_Tube",by.y="row.names")
+  
+  
   #Diet Exposures
   #exposures <- c("m_fat", "m_cho", "m_tsug", "m_asug", "m_fruc", "m_pro", "sugbev_plusjuice")
   #exposureNames <- c("m_fat","m_fat_adj", "m_cho","m_cho_adj", "m_tsug","m_tsug_adj", "m_asug","m_asug_adj", "m_fruc","m_fruc_adj", "m_pro", "m_pro_adj", "sugbev_plusjuice","sugbev_plusjuice_adj")
@@ -151,8 +143,8 @@ mappingData <- mappingData[order(mappingData$MergeID),]
   exposureNames <- c("homair", "homair_adj", "homab_new", "homab_adj", "insulin_fasting", "insulin_fasting_adj", "gluc_fasting", "gluc_fasting_adj", 
                      "MRI_HFF", "MRI_HFF_adj", "MRI_VAT", "MRI_VAT_adj", "MRI_SAAT", "MRI_SAAT_adj", "Bodyfatper", "Bodyfatper_adj",
                      "stnfrii_multiplex","stnfrii_multiplex_adj","mcp1_multiplex","mcp1_multiplex_adj","il10_multiplex","il10_multiplex_adj",
-                      "il1b_multiplex","il1b_multiplex_adj","il6_multiplex","il6_multiplex_adj","il13_multiplex","il13_multiplex_adj",
-                       "il17_multiplex","il17_multiplex_adj","il4_multiplex","il4_multiplex_adj","il5_multiplex","il5_multiplex_adj")
+                     "il1b_multiplex","il1b_multiplex_adj","il6_multiplex","il6_multiplex_adj","il13_multiplex","il13_multiplex_adj",
+                     "il17_multiplex","il17_multiplex_adj","il4_multiplex","il4_multiplex_adj","il5_multiplex","il5_multiplex_adj")
   
   allExposures <- names(taxaMeta)[(length(mappingData)+1):length(taxaMeta)];
   allCorrelations <- names(taxaMeta)[(length(mappingData)+1):length(taxaMeta)];
@@ -216,5 +208,6 @@ mappingData <- mappingData[order(mappingData$MergeID),]
   names(allExposures) <- c("Taxa",exposureNames);
   
   write.table(allExposures,paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/statisticalModelResults_",taxa,"_Univariate_blood_MetaFat.txt",sep=""),quote=FALSE, sep="\t",append=FALSE, col.names=TRUE, row.names=FALSE);
- 
+  
 }
+
