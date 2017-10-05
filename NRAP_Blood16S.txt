@@ -2,10 +2,14 @@ library(ppcor)
 library(vegan)
 library(dplyr)
 library(tidyr)
+library(rmarkdown)
+library(ggplot2)
+
 
 rm(list=ls())
 
 setwd("~/Dropbox/NRAP MetaAIR Stool Sequencing")
+
 
 mappingData <- read.delim("Datasets/MetaAir_NRAP_26apr17.txt",header=TRUE, sep=",")
 mappingData <- mappingData[order(mappingData$MergeID),]
@@ -15,7 +19,7 @@ mappingData <- mappingData[order(mappingData$MergeID),]
 ################################################
 #taxaLevels <- c("Class", "Order", "Family", "Genus", "Species", "OTU" )
 #taxaLevels <- c("Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU" )
-taxaLevels <- c( "Family" )
+taxaLevels <- c( "Phylum" ) #Loops are having issues, need to figure out why
 
 
 for( taxa in taxaLevels ) 
@@ -38,13 +42,52 @@ for( taxa in taxaLevels )
   
   write.table(newT, sep="\t", file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/pcoa_TLA_", taxa, ".txt",sep=""),row.names=FALSE)
   write.table(myPCOA$CA$eig,file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/eigenValues_TLA_", taxa, ".txt", sep=""), sep="\t")
-}
 
+  #Added below for plots
+  write.table(myPCOA$CA$u, sep="\t", file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/mds_eigenvectors_",taxa,"_log.txt",sep=""))
+    eigenNames=cbind("X","loading")
+  write.table(eigenNames,file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/eigenValues_",taxa,"_log.txt", sep=""), sep="\t",col.names=FALSE,row.names=FALSE)
+  write.table(myPCOA$CA$eig/sum(myPCOA$CA$eig),file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/eigenValues_",taxa,"_log.txt", sep=""), sep="\t",col.names=FALSE,append=TRUE)
+  
+  }
+
+# TRYING TO MAKE MDS PLOTS #
+taxa <- c("Phylum")
+
+mdsFile <- paste(  "/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/mds_eigenvectors_",taxa,"_log.txt",sep="");
+eigenFile <- paste(  "/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/eigenValues_",taxa,"_log.txt",sep="");
+
+mds <-read.table(mdsFile,header=TRUE,sep="\t",row.names=1);
+mdsMeta <- merge(mappingData,mds,by.x="ID_Tube",by.y="row.names")
+eigen <-read.table(eigenFile,header=TRUE,sep="\t");
+
+title <- paste("MDS plot (",taxa," level)",sep="")
+comp1<-as.character(paste("MDS1"," ",(round(eigen$loading[1],3))*100,"%",sep = ""));
+comp2<-as.character(paste("MDS2"," ",(round(eigen$loading[2],3))*100,"%",sep = ""));
+p <- ggplot(mdsMeta,aes(x=MDS1, y=MDS2,shape=as.factor(MALE),color=as.factor(MALE)))
+tiff(paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/",taxa,"_Blood_Male.tiff",sep=""),width=200,height=200,units="mm",compression="lzw",res=350)
+print(p + geom_point(size = 8) +
+        scale_colour_manual(values=c("grey50","red2","blue3","green3")) +
+        scale_shape_manual(values=c(4,19,17)) +
+        xlab(comp1) + ylab(comp2) +
+        ggtitle(title) +
+        theme_classic(base_size = 20)+
+        theme(axis.line=element_line(size=1),
+              axis.ticks=element_line(size=1),
+              axis.text=element_text(face="bold",size=16),
+              text=element_text(face="bold",size=20),
+              legend.position="bottom",
+              legend.title=element_blank()
+        )+
+        theme(axis.line.x = element_line(color="black", size = 2),
+              axis.line.y = element_line(color="black", size = 2)
+        )
+)
+graphics.off()
+#
 #################################################
 ######   Working in code from AF - TAXA #########
 #################################################
-
-#taxaLevels <- c("Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU" )
 
 for( taxa in taxaLevels ) 
 {
@@ -75,7 +118,6 @@ for( taxa in taxaLevels )
     
     stripchart(bug~ isControl, 	data = myFrame,vertical = TRUE, pch = 21, add=TRUE )		
     
-    
   }
   
   dFrame <- data.frame( names, pValues)
@@ -85,22 +127,11 @@ for( taxa in taxaLevels )
   dev.off()	
 }
 
-# isSigInFrame <- function(dFrame, taxaName)
-# {
-#   #if( length(dFrame$adjustedP[ dFrame$names == taxaName ]) == 0  ) 
-#   #return (FALSE)
-#   
-#   if( dFrame$adjustedP[ dFrame$names == taxaName ] < .05 ) 
-#     return ( TRUE)
-#   else
-#     return (FALSE)
-# }
 
 #####################################################################################################
 # At the Family Examine: Family_Staphylococcaceae Family_Clostridiaceae.1 Family_Multi.affiliation
 # Family_Phyllobacteriaceae, Family_Caulobacteraceae
 #####################################################################################################
-#taxaLevels <- c("Family")
 
 for(taxa in taxaLevels)
 {
@@ -118,8 +149,8 @@ for(taxa in taxaLevels)
   
   TaxaNamesForComparison <- colnames(myTLoggedSubSetNoControls)
   
-  dFrameSubsetTaxa <- filter(dFrame, names %in% TaxaNamesForComparison, adjustedP < 0.05)
-  dFrameSubsetSig  <- filter(dFrameSubsetTaxa, adjustedP < 0.05)
+  dFrameSubsetTaxa <- filter(dFrame, names %in% TaxaNamesForComparison, adjustedP < 0.16)
+  dFrameSubsetSig  <- filter(dFrameSubsetTaxa, adjustedP < 0.16)
   dFrameSubsetSig2 <- select(myTLoggedSubSetNoControls,one_of(as.character(dFrameSubsetSig$names)))
   
   
@@ -210,4 +241,3 @@ for(taxa in taxaLevels)
   write.table(allExposures,paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/statisticalModelResults_",taxa,"_Univariate_blood_MetaFat.txt",sep=""),quote=FALSE, sep="\t",append=FALSE, col.names=TRUE, row.names=FALSE);
   
 }
-
