@@ -1,0 +1,366 @@
+library(ppcor)
+library(vegan)
+library(dplyr)
+library(tidyr)
+library(rmarkdown)
+library(ggplot2)
+library(lmSupport)
+
+rm(list=ls())
+
+setwd("~/Dropbox/NRAP MetaAIR Stool Sequencing")
+
+mappingData <- read.delim("Datasets/metaairpro_metadata_26apr17.txt",header=TRUE, sep=",")
+mappingData <- mappingData[order(mappingData$MergeID),]
+
+
+################################################
+######  Working in code from AF - MDS  #########
+################################################
+#taxaLevels <- c("Class", "Order", "Family", "Genus", "Species", "OTU" )
+#taxaLevels <- c("Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU" )
+#taxaLevels <- c("AlphaDiversity","Phylum","Class","Order","Family","Genus","OTU")
+#taxaLevels <- c( "Class" ) 
+taxaLevels <- c("Class", "Order", "Family", "Genus") 
+
+
+for( taxa in taxaLevels ) 
+{
+  otuTableAir <- read.delim(paste("Datasets/Blood Sequencing/Blood ",taxa," META 18July16.txt",sep = ""),header = TRUE, row.names = 1)
+  myTMeta <- t(otuTableAir)
+  
+  otuTablePro <- read.delim(paste("Datasets/Blood Sequencing/Blood ",taxa," PRO 18July16.txt",sep = ""),header = TRUE, row.names = 1)
+  myTPro <- t(otuTablePro)
+  
+  myT <- merge(myTMeta,myTPro,by="row.names",all=TRUE)
+  row.names(myT) <- myT$Row.names
+  myT <- myT[,-1]
+  myT[is.na(myT)]  <- 0
+  
+  #Blood data is percentages and not sequence read counts. 
+  #"myT/100" to convert the numbers from "%" to decimals. 
+  #Multiply by the average sequence counts per sample 
+  #Got this number from the OTU-level blood table (since the other levels are reported in terms of relative abundances) and it is ~35,000.
+  myTLogged <- log10(((myT/100)*35000) +1)
+  myT <- t(myTLogged)
+  
+  myPCOA <- capscale(myT~1,distance="bray")
+  
+  newT <- data.frame( cbind( myPCOA$CA$u, myT))
+  newT$isControl <- substring(row.names(myT),1,1) == "C"
+  newT$names <- row.names(myT)
+  
+  write.table(newT, sep="\t", file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/pcoa_TLA_NRAPPro", taxa, ".txt",sep=""),row.names=FALSE)
+  write.table(myPCOA$CA$eig,file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/eigenValues_TLA_NRAPPro", taxa, ".txt", sep=""), sep="\t")
+
+  #Added below for plots -Q: Difference between eig and u???
+  write.table(myPCOA$CA$u, sep="\t", file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/mds_eigenvectors_",taxa,"_log.txt",sep=""))
+    eigenNames=cbind("X","loading")
+  write.table(eigenNames,file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/eigenValues_",taxa,"_log_NRAPPro.txt", sep=""), sep="\t",col.names=FALSE,row.names=FALSE)
+  write.table(myPCOA$CA$eig/sum(myPCOA$CA$eig),file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/eigenValues_",taxa,"_log_NRAPPro.txt", sep=""), sep="\t",col.names=FALSE,append=TRUE)
+  
+  
+
+# # TRYING TO MAKE MDS PLOTS #
+# taxa <- c("Phylum")
+# 
+# mdsFile <- paste(  "/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/mds_eigenvectors_",taxa,"_log.txt",sep="");
+# eigenFile <- paste(  "/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/eigenValues_",taxa,"_log.txt",sep="");
+# 
+# mds <-read.table(mdsFile,header=TRUE,sep="\t",row.names=1);
+# mdsMeta <- merge(mappingData,mds,by.x="ID_Tube",by.y="row.names") #controls being dropped.
+# mdsMeta$isControl <- substring(row.names(mdsMeta),1,1) == "C"
+# 
+# eigen <-read.table(eigenFile,header=TRUE,sep="\t");
+# 
+# title <- paste("MDS plot (",taxa," level)",sep="")
+# comp1<-as.character(paste("MDS1"," ",(round(eigen$loading[1],3))*100,"%",sep = ""));
+# comp2<-as.character(paste("MDS2"," ",(round(eigen$loading[2],3))*100,"%",sep = ""));
+# #p <- ggplot(mdsMeta,aes(x=MDS1, y=MDS2,shape=as.factor(MALE),color=as.factor(MALE)))
+# #p <- ggplot(mdsMeta,aes(x=MDS1, y=MDS2,shape=isControl,color=isControl))
+# p <- plot( mdsMeta$MDS1, mdsMeta$MDS2,pch=ifelse(isControl,15,19), col= ifelse(isControl==FALSE, "black","red"))
+# tiff(paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/",taxa,"_Blood_Control.tiff",sep=""),width=200,height=200,units="mm",compression="lzw",res=350)
+# print(p + geom_point(size = 8) +
+#         scale_colour_manual(values=c("grey50","red2","blue3","green3")) +
+#         scale_shape_manual(values=c(4,19,17)) +
+#         xlab(comp1) + ylab(comp2) +
+#         ggtitle(title) +
+#         theme_classic(base_size = 20)+
+#         theme(axis.line=element_line(size=1),
+#               axis.ticks=element_line(size=1),
+#               axis.text=element_text(face="bold",size=16),
+#               text=element_text(face="bold",size=20),
+#               legend.position="bottom",
+#               legend.title=element_blank()
+#         )+
+#         theme(axis.line.x = element_line(color="black", size = 2),
+#               axis.line.y = element_line(color="black", size = 2)
+#         )
+# )
+# graphics.off()
+# #
+#################################################
+######   Working in code from AF - TAXA #########
+#################################################
+  
+  pdf(paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/pValues_TLA_NRAPPro",taxa,"TLA.pdf"))
+  pValues <- vector()
+  names <- vector()
+  
+  isControl <- substring(row.names(myT),1,1) == "C"
+  
+  for( i in 2: ncol(myT))
+  {
+    bug <- myT[,i]
+    pValues[i-1] <- t.test(bug[isControl ==TRUE] , bug[isControl ==FALSE])$p.value
+    names[i-1] <- colnames(myT)[i] #had to add col in front of names
+    
+    myTitle <- paste( colnames(myT)[i], "P =", format(pValues[i-1],digits=3 ))
+    
+    boxplot( bug ~ isControl , main = myTitle)
+    
+    myFrame <- data.frame(bug ,isControl)
+    
+    stripchart(bug~ isControl, 	data = myFrame,vertical = TRUE, pch = 21, add=TRUE )		
+    
+  }
+  
+  dFrame <- data.frame( names, pValues)
+  dFrame <- dFrame [order(dFrame$pValues),]
+  dFrame$adjustedP <- p.adjust( dFrame$pValues, method = "BH" )	
+  write.table(dFrame, file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/pValues_TLA_NRAPPro", taxa, ".txt",sep=""), sep="\t",row.names=FALSE)
+  dev.off()	
+  
+  
+  ###
+  
+  #Remove controls
+  myTLogged <- data.frame(myT)
+  myTLogged$isControl <- substring(row.names(myTLogged),1,1) == "C"
+  myTLoggedSubSetNoControls <- myTLogged[which(myTLogged$isControl != "TRUE"), ]
+  #t_myTLoggedSubSetNoControls <- t(myTLoggedSubSetNoControls)
+  
+  TaxaNamesForComparison <- colnames(myTLoggedSubSetNoControls)
+  
+  dFrameSubsetSig <- filter(dFrame, names %in% TaxaNamesForComparison, adjustedP < 0.10)
+    #dFrameSubsetSig  <- filter(dFrameSubsetTaxa, adjustedP < 0.16)
+  dFrameSubsetSig2 <- select(myTLoggedSubSetNoControls,one_of(as.character(dFrameSubsetSig$names)))
+  
+  #Merge in Metadata
+  taxaMeta <- merge(mappingData, dFrameSubsetSig2, by.x="ID_Tube",by.y="row.names")
+  
+  #Look by Glucose Level
+  pdf(paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/pValues_Glycemia_TLA_NRAPPro",taxa,"TLA.pdf"))
+  
+  GlycemiaStatus <- vector()
+  pValuesGlycemia <- vector()
+  namesGlycemia <- vector()
+  
+  taxaMeta$GlycemiaStatus<-ifelse(taxaMeta$gluc_fasting > 90, "Diabetic", "NGT")
+  
+  for(i in (length(mappingData)+4):length(taxaMeta)-1) 
+  {
+    bug <- taxaMeta[,i]
+    pValuesGlycemia[i-1] <- t.test(bug[taxaMeta$GlycemiaStatus =="Diabetic"] , bug[taxaMeta$GlycemiaStatus =="NGT"])$p.value
+    namesGlycemia[i-1] <- colnames(taxaMeta)[i] 
+    
+    myTitle <- paste( colnames(taxaMeta)[i], "P =", format(pValuesGlycemia[i-1],digits=3 ))
+    
+    boxplot( bug ~ taxaMeta$GlycemiaStatus , main = myTitle)
+    
+    myFrame <- data.frame(bug ,taxaMeta$GlycemiaStatus)
+    
+    stripchart(bug~ taxaMeta$GlycemiaStatus, 	data = myFrame,vertical = TRUE, pch = 21, add=TRUE )		
+    
+  }
+  
+  dFrameGlycemia <- data.frame( namesGlycemia, pValuesGlycemia)
+  dFrameGlycemia <- dFrameGlycemia [order(dFrameGlycemia$pValuesGlycemia),]
+  dFrameGlycemia$adjustedPGlycemia <- p.adjust( dFrameGlycemia$pValuesGlycemia, method = "BH" )	
+  write.table(dFrame, file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/pValues_Glycemia_TLA_NRAPPro", taxa, ".txt",sep=""), sep="\t",row.names=FALSE)
+  dev.off()	
+  
+  #Look by NAFLD
+  pdf(paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/pValues_NAFLD_TLA_NRAPPro",taxa,"TLA.pdf"))
+  
+  NAFLDStatus <- vector()
+  pValuesNAFLD <- vector()
+  namesNAFLD <- vector()
+  
+  taxaMeta$NAFLDStatus<-ifelse(taxaMeta$MRI_HFF >= 5.5, "NAFLD", "NonNAFLD")
+  
+  for(i in (length(mappingData)+4):length(taxaMeta)-2) 
+  {
+    bug <- taxaMeta[,i]
+    pValuesNAFLD[i-1] <- t.test(bug[taxaMeta$NAFLDStatus =="NAFLD"] , bug[taxaMeta$NAFLDStatus =="NonNAFLD"])$p.value
+    namesNAFLD[i-1] <- colnames(taxaMeta)[i] 
+    
+    myTitle <- paste( colnames(taxaMeta)[i], "P =", format(pValuesNAFLD[i-1],digits=3 ))
+    
+    boxplot( bug ~ taxaMeta$NAFLDStatus , main = myTitle)
+    
+    myFrame <- data.frame(bug ,taxaMeta$NAFLDStatus)
+    
+    stripchart(bug~ taxaMeta$NAFLDStatus, 	data = myFrame,vertical = TRUE, pch = 21, add=TRUE )		
+    
+  }
+  
+  dFrameNAFLD <- data.frame( namesNAFLD, pValuesNAFLD)
+  dFrameNAFLD <- dFrameNAFLD [order(dFrameNAFLD$pValuesNAFLD),]
+  dFrameNAFLD$adjustedPNAFLD <- p.adjust( dFrameNAFLD$pValuesNAFLD, method = "BH" )	
+  write.table(dFrame, file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/pValues_NAFLD_TLA_NRAPPro", taxa, ".txt",sep=""), sep="\t",row.names=FALSE)
+  dev.off()	
+  
+  #Look by Race
+  pdf(paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/pValues_HISP_TLA_NRAPPro_Wilcox",taxa,"TLA.pdf"))
+  
+  HISPStatus <- vector()
+  pValuesHISP <- vector()
+  pValuesHISPWilcox<- vector()
+  namesHISP <- vector()
+  
+  taxaMeta$HISPStatus<-ifelse(taxaMeta$Hisp == 1, "Hisp", "NonHispWhite")
+  
+  for(i in (length(mappingData)+4):length(taxaMeta)-3) 
+  {
+    bug <- taxaMeta[,i]
+    pValuesHISP[i-1] <- t.test(bug[taxaMeta$HISPStatus =="Hisp"] , bug[taxaMeta$HISPStatus =="NonHispWhite"])$p.value
+    pValuesHISPWilcox[i-1] <- wilcox.test(bug[taxaMeta$HISPStatus =="Hisp"] , bug[taxaMeta$HISPStatus =="NonHispWhite"])$p.value
+    
+    namesHISP[i-1] <- colnames(taxaMeta)[i] 
+    
+    #myTitle <- paste( colnames(taxaMeta)[i], "P =", format(pValuesHISP[i-1],digits=3 ))
+    myTitle <- paste( colnames(taxaMeta)[i], "P(Wilcox) =", format(pValuesHISPWilcox[i-1],digits=3 ))
+    
+    boxplot( bug ~ taxaMeta$HISPStatus , main = myTitle)
+    
+    myFrame <- data.frame(bug ,taxaMeta$HISPStatus)
+    
+    stripchart(bug~ taxaMeta$HISPStatus, 	data = myFrame,vertical = TRUE, pch = 21, add=TRUE )		
+    
+  }
+  
+  
+  #dFrameHISP <- data.frame( namesHISP, pValuesHISP)
+  dFrameHISP <- data.frame( namesHISP, pValuesHISPWilcox)
+  
+  #dFrameHISP <- dFrameHISP [order(dFrameHISP$pValuesHISP),]
+  dFrameHISP <- dFrameHISP [order(dFrameHISP$pValuesHISPWilcox),]
+  
+  #dFrameHISP$adjustedPHISP <- p.adjust( dFrameHISP$pValuesHISP, method = "BH" )	
+  dFrameHISP$adjustedPHISP <- p.adjust( dFrameHISP$pValuesHISPWilcox, method = "BH" )	
+  
+  write.table(dFrame, file=paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/pValues_HISP_TLA_NRAPPro_Wilcox", taxa, ".txt",sep=""), sep="\t",row.names=FALSE)
+  dev.off()	
+  
+  #Diet Exposures
+  exposures <- c("MRI_HFF", "MRI_VAT", "MRI_SAAT", "Bodyfatper")
+  exposureNames <- c("MRI_HFF_beta","MRI_HFF_pval", "MRI_HFF_adj", 
+                     "MRI_HFF_rSpearman","MRI_HFF_Spearmanpval", "MRI_HFF_Spearmanadj", 
+                     "MRI_HFF_rKendall","MRI_HFF_Kendallpval", "MRI_HFF_Kendalladj",
+                     "MRI_VAT_beta","MRI_VAT_pval", "MRI_VAT_adj", 
+                     "MRI_VAT_rSpearman","MRI_VAT_Spearmanpval", "MRI_VAT_Spearmanadj", 
+                     "MRI_VAT_rKendall","MRI_VAT_Kendallpval", "MRI_VAT_Kendalladj", 
+                     "MRI_SAAT_beta", "MRI_SAAT_pval","MRI_SAAT_adj", 
+                     "MRI_SAAT_rSpearman", "MRI_SAAT_Spearmanpval","MRI_SAAT_Spearmanadj", 
+                     "MRI_SAAT_rKendall", "MRI_SAAT_Kendallpval","MRI_SAAT_Kendalladj", 
+                     "Bodyfatper_beta","Bodyfatper_pval","Bodyfatper_adj",
+                     "Bodyfatper_rSpearman","Bodyfatper_Spearmanpval","Bodyfatper_Spearmanadj",
+                     "Bodyfatper_rKendall","Bodyfatper_Kendallpval","Bodyfatper_Kendalladj")
+  
+  #AP Explosures
+  #exposures <- c("Avg_NO2_24h_new", "avg_PM10_24h_new", "avg_PM25_24h_new", "mean_fwynox", "mean_nonfwynox", "mean_totnox")
+  #exposureNames <- c("Avg_NO2_24h_new", "Avg_NO2_24h_new_adj", "avg_PM10_24h_new", "avg_PM10_24h_new_adj", "avg_PM25_24h_new", "avg_PM25_24h_new_adj", "mean_fwynox", "mean_fwynox_adj", "mean_nonfwynox", "mean_nonfwynox_adj","mean_totnox", "mean_totnox_adj")
+  
+  allExposures <- names(taxaMeta)[(length(mappingData)+4):length(taxaMeta)-3];
+  allEffectSizes <- names(taxaMeta)[(length(mappingData)+4):length(taxaMeta)-3];
+  allCorrelations <- names(taxaMeta)[(length(mappingData)+4):length(taxaMeta)-3];
+  allKendallCorrelations <- names(taxaMeta)[(length(mappingData)+4):length(taxaMeta)-3];
+  
+  for(j in seq(1:length(exposures)))
+  {
+    pValExposureList <- numeric(0);
+    effectExposureList <- numeric(0);
+    
+    rValExposureList <- numeric(0);
+    kenValExposureList <- numeric(0);
+    
+    pValCorExposureList <- numeric(0);
+    pValKendallCorExposureList <- numeric(0);
+    
+    pdf(file = paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/",exposures[j],"_",taxa,"MetaFat.pdf",sep=""))
+    par(mfrow=c(2,2))
+    for(i in (length(mappingData)+4):length(taxaMeta)-3) 
+    {
+      #Univariate Model
+      modelForm=as.formula(paste(names(taxaMeta)[i],"~",exposures[j]));
+      print(modelForm);
+      statMod <- lm(modelForm,data=taxaMeta)
+      
+      pValExposure <- summary(statMod)$coefficients[2,4];
+      
+      effects <- modelEffectSizes(statMod,FALSE)
+      effectSizeExposure <- effects$Effects[2,4];
+      
+      #Spearman Correlations (unadjusted) 
+      rForm=as.formula(paste("~",names(taxaMeta)[i],"+",exposures[j]));
+      print(rForm);
+      
+      rVal <- cor.test(rForm,data=taxaMeta,method="spearman")$"estimate"
+      rPVal <- cor.test(rForm,data=taxaMeta,method="spearman")$"p.value"
+      
+      kenVal <- cor.test(rForm,data=taxaMeta,method="kendall")$"estimate"
+      kenPVal<- cor.test(rForm,data=taxaMeta,method="kendall")$"p.value"
+      
+      ##### Making a list with just the exposure values (same as taxaMeta$m_asug for example). This list will change for each exposure)
+      exposureValues <- taxaMeta[,names(taxaMeta) %in% exposures[j]]
+      
+      ##### Making a list with just the bacteria values (same as taxaMeta$p__Bacteroides). This list will change for each bacteria)
+      bacteriaValues <- taxaMeta[,i]
+      
+
+      if(pValExposure <= 0.05)
+      {
+        title<-paste(" p-value= ",
+                     format(pValExposure,digits=3), sep="")
+        
+        plot(exposureValues, bacteriaValues, main=title,
+             xlab = exposures[j], 
+             ylab = names(taxaMeta)[i],
+             pch = 19, cex = 1.25, col = "grey39",
+             sub = paste("n= ",table(is.na(exposureValues))[1],sep = "")
+        )
+        #abline(a=coef(statMod)[1],b=coef(statMod)[2],lwd = 2, col="red")
+        #abline(statMod, lwd = 2, col="red");
+      }
+      
+      #Building a running list of the pvalues for output
+      effectExposureList[[length(effectExposureList)+1]] <- effectSizeExposure;
+      pValExposureList[[length(pValExposureList)+1]] <- pValExposure;
+      
+      rValExposureList[[length(rValExposureList)+1]] <- rVal;
+      pValCorExposureList[[length(pValCorExposureList)+1]] <- rPVal;
+      
+      kenValExposureList[[length(kenValExposureList)+1]] <- kenVal;
+      pValKendallCorExposureList[[length(pValKendallCorExposureList)+1]] <- kenPVal;
+      
+    }
+    
+    graphics.off();
+    
+    adjPvals <- p.adjust(pValExposureList,method = "BH")
+    radjPvals <- p.adjust(pValCorExposureList,method = "BH")
+    kenadjPvals <- p.adjust(pValKendallCorExposureList,method = "BH")
+    
+    allEffectSizes <- cbind(allEffectSizes,
+                            effectExposureList,pValExposureList,adjPvals,
+                            rValExposureList,pValCorExposureList,radjPvals,
+                            kenValExposureList,pValKendallCorExposureList,kenadjPvals);
+  }
+
+  allEffectSizes<- data.frame(allEffectSizes)
+  names(allEffectSizes) <- c("Taxa",exposureNames);
+  
+  write.table(allEffectSizes,paste("/users/tanya/Documents/NRAP_Blood_AF_UNCC_Visit/statisticalModelResults_NonParCorr",taxa,"_Univariate_blood_MetaFat_NRAPPro.txt",sep=""),quote=FALSE, sep="\t",append=FALSE, col.names=TRUE, row.names=FALSE);
+  
+}
